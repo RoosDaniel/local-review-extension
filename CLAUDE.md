@@ -50,3 +50,8 @@ src/
 - **Workspace file for IntelliSense**: When the right side of a diff is HEAD and the file has no uncommitted changes, we use the actual `file://` URI instead of a virtual one. This gives full language features (go-to-definition, hover, etc.).
 - **Uncommitted changes**: Virtual entry at top of commit list. Uses `file://` URI for the right side, `git diff HEAD` for file list.
 - **XML export format**: `<review base="" head="">` wrapping `<comment>` elements with `<code>` and `<body>` children. No XML escaping — LLMs handle raw code fine.
+
+## Code Style
+
+- Small duplications (comment body extraction, URI parsing, line range formatting) exist across files and are intentional — extracting them into shared utilities would add more indirection than the ~3 duplicated lines justify at this codebase size.
+- Keep the codebase flat and simple. Avoid abstractions until there's a clear third use case.
