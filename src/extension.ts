@@ -1,5 +1,9 @@
 import * as vscode from "vscode";
-import { getRepoRoot } from "./git";
+import {
+  fileHasUncommittedChanges,
+  getHeadHash,
+  getRepoRoot,
+} from "./git";
 import { UNCOMMITTED } from "./commitsTree";
 import { GitContentProvider, makeGitUri } from "./gitContentProvider";
 import { CommitsTreeProvider } from "./commitsTree";
@@ -168,11 +172,18 @@ export async function activate(
           headRevision: headCommit,
         });
         const leftUri = makeGitUri(mergeBase, filePath);
-        const rightUri =
-          headCommit === UNCOMMITTED
-            ? vscode.Uri.file(`${cwd}/${filePath}`)
-            : makeGitUri(headCommit, filePath);
-        if (headCommit === UNCOMMITTED) {
+
+        // Use workspace file for the right side when possible (gives IntelliSense)
+        const headHash = await getHeadHash(cwd);
+        const useWorkspaceFile =
+          headCommit === UNCOMMITTED ||
+          (headCommit === headHash &&
+            !(await fileHasUncommittedChanges(cwd, filePath)));
+
+        const rightUri = useWorkspaceFile
+          ? vscode.Uri.file(`${cwd}/${filePath}`)
+          : makeGitUri(headCommit, filePath);
+        if (useWorkspaceFile) {
           commentStore.addReviewFileUri(rightUri);
         }
         const title = `${filePath} (review)`;

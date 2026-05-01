@@ -209,6 +209,29 @@ export async function getUncommittedFiles(
     .sort((a, b) => a.path.localeCompare(b.path));
 }
 
+export async function getHeadHash(cwd: string): Promise<string> {
+  return git(cwd, "rev-parse", "HEAD");
+}
+
+export async function fileHasUncommittedChanges(
+  cwd: string,
+  filePath: string
+): Promise<boolean> {
+  try {
+    const output = await git(
+      cwd,
+      "diff",
+      "--name-only",
+      "HEAD",
+      "--",
+      filePath
+    );
+    return output.length > 0;
+  } catch {
+    return true; // assume dirty if we can't tell
+  }
+}
+
 export async function getRepoRoot(cwd: string): Promise<string> {
   return git(cwd, "rev-parse", "--show-toplevel");
 }
