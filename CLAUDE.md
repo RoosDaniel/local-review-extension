@@ -1,0 +1,52 @@
+# CLAUDE.md
+
+## Overview
+
+VS Code/Cursor extension for reviewing local git changes with inline comments. Exports reviews as XML to clipboard, optimized for pasting into AI coding assistants.
+
+## Development
+
+```bash
+npm install
+npm run compile          # or npm run watch
+# Press F5 to launch Extension Development Host
+```
+
+## Build & Release
+
+```bash
+npx @vscode/vsce package
+gh release create v<version> local-review-<version>.vsix --title "v<version>"
+cursor --install-extension local-review-<version>.vsix
+```
+
+Always bump the version in `package.json` before packaging — don't reuse version numbers.
+
+## Architecture
+
+```
+src/
+├── extension.ts          # Entry point, wires everything together
+├── git.ts                # Shell out to git CLI (commits, diffs, file content)
+├── gitContentProvider.ts # TextDocumentContentProvider for local-review-git:// URIs
+├── commitsTree.ts        # Sidebar: commit list with checkboxes
+├── filesTree.ts          # Sidebar: changed files filtered by selected commits
+├── commentsTree.ts       # Sidebar: comment list with navigate/copy/delete
+├── commentStore.ts       # Comment state, thread tracking, CommentController
+└── export.ts             # XML clipboard formatting
+```
+
+### Key VS Code APIs
+
+- **CommentController** (`commentStore.ts`): Provides the inline comment UI on diff views. Thread tracking is manual — VS Code doesn't expose created threads, so we maintain our own array.
+- **TreeDataProvider** (`commitsTree.ts`, `filesTree.ts`, `commentsTree.ts`): Sidebar panels. Commits tree uses `manageCheckboxStateManually: true` for contiguity enforcement.
+- **TextDocumentContentProvider** (`gitContentProvider.ts`): Serves file content at git revisions via `local-review-git://<revision>/<path>` URIs.
+- **vscode.diff command**: Opens the built-in diff editor between two URIs.
+
+### Key Design Decisions
+
+- **Single diff context**: All comments share one base..head range. Commit selection is locked once comments exist — user must clear comments before changing selection. This keeps the export unambiguous.
+- **Contiguous commit selection**: Checkbox toggling auto-fills gaps to enforce a contiguous range.
+- **Workspace file for IntelliSense**: When the right side of a diff is HEAD and the file has no uncommitted changes, we use the actual `file://` URI instead of a virtual one. This gives full language features (go-to-definition, hover, etc.).
+- **Uncommitted changes**: Virtual entry at top of commit list. Uses `file://` URI for the right side, `git diff HEAD` for file list.
+- **XML export format**: `<review base="" head="">` wrapping `<comment>` elements with `<code>` and `<body>` children. No XML escaping — LLMs handle raw code fine.
