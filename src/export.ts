@@ -8,39 +8,46 @@ function shortRev(rev: string): string {
   return rev === "uncommitted" ? rev : rev.slice(0, 7);
 }
 
-export function formatHeader(ctx: DiffContext): string {
+function formatLines(comment: StoredComment): string {
+  return comment.startLine === comment.endLine
+    ? `${comment.startLine}`
+    : `${comment.startLine}-${comment.endLine}`;
+}
+
+export function formatComment(
+  comment: StoredComment,
+  indent = "  "
+): string {
+  const side = comment.side === "before" ? "old" : "new";
   const lines: string[] = [];
+
   lines.push(
-    `# Review: ${shortRev(ctx.baseRevision)}..${shortRev(ctx.headRevision)}`
+    `${indent}<comment file="${(comment.filePath)}" lines="${formatLines(comment)}" side="${side}">`
   );
-  lines.push("");
-  lines.push(
-    `Comments marked **[old code]** refer to the base version (${shortRev(ctx.baseRevision)}).`
-  );
-  lines.push(
-    `Comments marked **[new code]** refer to the changed version (${shortRev(ctx.headRevision)}).`
-  );
+
+  if (comment.codeContext) {
+    lines.push(`${indent}  <code>`);
+    lines.push((comment.codeContext));
+    lines.push(`${indent}  </code>`);
+  }
+
+  lines.push(`${indent}  <body>${(comment.body)}</body>`);
+  lines.push(`${indent}</comment>`);
+
   return lines.join("\n");
 }
 
-export function formatComment(comment: StoredComment): string {
-  const range =
-    comment.startLine === comment.endLine
-      ? `L${comment.startLine}`
-      : `L${comment.startLine}-L${comment.endLine}`;
-
-  const side = comment.side === "before" ? "old code" : "new code";
-
+export function formatSingleComment(
+  store: CommentStore,
+  comment: StoredComment
+): string {
+  const ctx = store.diffContext;
   const lines: string[] = [];
-  lines.push(`## ${comment.filePath}:${range} [${side}]`);
-
-  if (comment.codeContext) {
-    lines.push("```");
-    lines.push(comment.codeContext);
-    lines.push("```");
-  }
-
-  lines.push(comment.body);
+  lines.push(
+    `<review base="${shortRev(ctx.baseRevision)}" head="${shortRev(ctx.headRevision)}">`
+  );
+  lines.push(formatComment(comment));
+  lines.push("</review>");
   return lines.join("\n");
 }
 
@@ -53,8 +60,14 @@ export function formatReviewForClipboard(
     return "";
   }
 
-  const header = formatHeader(store.diffContext);
-  const body = comments.map(formatComment).join("\n\n");
-
-  return `${header}\n\n${body}`;
+  const ctx = store.diffContext;
+  const lines: string[] = [];
+  lines.push(
+    `<review base="${shortRev(ctx.baseRevision)}" head="${shortRev(ctx.headRevision)}">`
+  );
+  for (const comment of comments) {
+    lines.push(formatComment(comment));
+  }
+  lines.push("</review>");
+  return lines.join("\n");
 }

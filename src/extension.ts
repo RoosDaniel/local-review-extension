@@ -11,8 +11,7 @@ import { FilesTreeProvider } from "./filesTree";
 import { CommentsTreeProvider } from "./commentsTree";
 import { CommentStore } from "./commentStore";
 import {
-  formatComment,
-  formatHeader,
+  formatSingleComment,
   formatReviewForClipboard,
 } from "./export";
 
@@ -323,9 +322,8 @@ export async function activate(
         if (!comment) {
           return;
         }
-        const header = formatHeader(commentStore.diffContext);
         await vscode.env.clipboard.writeText(
-          `${header}\n\n${formatComment(comment)}`
+          formatSingleComment(commentStore, comment)
         );
         vscode.window.showInformationMessage(
           "Copied comment to clipboard"
