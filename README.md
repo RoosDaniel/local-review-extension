@@ -12,7 +12,7 @@ VS Code/Cursor extension for reviewing local git changes with inline comments. E
 
 ## Clipboard output format
 
-```markdown
+````markdown
 # src/git.ts:L15-L17 [new code] (abc1234..def5678)
 ```
 const { stdout } = await execFileAsync("git", args, {
@@ -21,7 +21,7 @@ const { stdout } = await execFileAsync("git", args, {
 });
 ```
 This buffer size seems excessive for most operations
-```
+````
 
 ## Usage
 
