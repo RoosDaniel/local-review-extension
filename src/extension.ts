@@ -89,6 +89,20 @@ export async function activate(
     commitsTree.handleCheckboxChange(e.items);
   });
 
+  // Toggle commit via click (same lock logic as checkbox)
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "localReview.toggleCommit",
+      (item: { hash: string }) => {
+        if (commentStore.hasComments()) {
+          vscode.window.showWarningMessage(SELECTION_LOCKED_MSG);
+          return;
+        }
+        commitsTree.toggleCommit(item.hash);
+      }
+    )
+  );
+
   let currentDiffFilePath = "";
 
   commitsTree.onSelectionChanged(async (selectedHashes) => {

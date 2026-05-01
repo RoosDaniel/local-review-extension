@@ -93,6 +93,11 @@ export class CommitsTreeProvider
       ? vscode.TreeItemCheckboxState.Checked
       : vscode.TreeItemCheckboxState.Unchecked;
     item.contextValue = "commit";
+    item.command = {
+      command: "localReview.toggleCommit",
+      title: "Toggle Commit",
+      arguments: [element],
+    };
     return item;
   }
 
@@ -103,6 +108,19 @@ export class CommitsTreeProvider
   /** Re-render the tree without firing selection events (used to revert blocked changes). */
   refreshTree(): void {
     this._onDidChangeTreeData.fire(undefined);
+  }
+
+  toggleCommit(hash: string): void {
+    const target = this.commits.find((c) => c.hash === hash);
+    if (!target) return;
+    this.handleCheckboxChange([
+      [
+        target,
+        target.checked
+          ? vscode.TreeItemCheckboxState.Unchecked
+          : vscode.TreeItemCheckboxState.Checked,
+      ],
+    ]);
   }
 
   setAll(checked: boolean): void {

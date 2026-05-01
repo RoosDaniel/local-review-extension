@@ -8,7 +8,7 @@ function shortRev(rev: string): string {
   return rev === "uncommitted" ? rev : rev.slice(0, 7);
 }
 
-function formatHeader(ctx: DiffContext): string {
+export function formatHeader(ctx: DiffContext): string {
   const lines: string[] = [];
   lines.push(
     `# Review: ${shortRev(ctx.baseRevision)}..${shortRev(ctx.headRevision)}`
@@ -22,8 +22,6 @@ function formatHeader(ctx: DiffContext): string {
   );
   return lines.join("\n");
 }
-
-export { formatHeader };
 
 export function formatComment(comment: StoredComment): string {
   const range =
