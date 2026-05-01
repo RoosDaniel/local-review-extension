@@ -100,6 +100,11 @@ export class CommitsTreeProvider
     return this.commits;
   }
 
+  /** Re-render the tree without firing selection events (used to revert blocked changes). */
+  refreshTree(): void {
+    this._onDidChangeTreeData.fire(undefined);
+  }
+
   setAll(checked: boolean): void {
     for (const commit of this.commits) {
       commit.checked = checked;

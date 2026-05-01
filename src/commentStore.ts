@@ -2,27 +2,29 @@ import * as vscode from "vscode";
 
 type DiffSide = "before" | "after";
 
+export interface DiffContext {
+  baseRevision: string;
+  headRevision: string;
+}
+
 export interface StoredComment {
   filePath: string;
   startLine: number;
   endLine: number;
   body: string;
   side: DiffSide;
-  baseRevision: string;
-  headRevision: string;
-  codeContext: string;
-}
-
-interface ThreadMeta {
-  diffContext: { baseRevision: string; headRevision: string };
   codeContext: string;
 }
 
 export class CommentStore {
   private commentController: vscode.CommentController;
   private threads: vscode.CommentThread[] = [];
-  private threadMeta = new Map<vscode.CommentThread, ThreadMeta>();
+  private threadCodeContext = new Map<vscode.CommentThread, string>();
   private reviewFileUris = new Set<string>();
+  private _diffContext: DiffContext = {
+    baseRevision: "",
+    headRevision: "",
+  };
 
   private _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
@@ -50,6 +52,18 @@ export class CommentStore {
     };
   }
 
+  get diffContext(): DiffContext {
+    return this._diffContext;
+  }
+
+  setDiffContext(ctx: DiffContext): void {
+    this._diffContext = ctx;
+  }
+
+  hasComments(): boolean {
+    return this.threads.length > 0;
+  }
+
   addReviewFileUri(uri: vscode.Uri): void {
     this.reviewFileUris.add(uri.toString());
   }
@@ -58,7 +72,6 @@ export class CommentStore {
     uri: vscode.Uri,
     range: vscode.Range,
     body: string,
-    diffContext: { baseRevision: string; headRevision: string },
     codeContext: string
   ): vscode.CommentThread {
     const thread = this.commentController.createCommentThread(
@@ -76,7 +89,7 @@ export class CommentStore {
     thread.collapsibleState =
       vscode.CommentThreadCollapsibleState.Expanded;
     this.threads.push(thread);
-    this.threadMeta.set(thread, { diffContext, codeContext });
+    this.threadCodeContext.set(thread, codeContext);
     this._onDidChange.fire();
     return thread;
   }
@@ -94,9 +107,8 @@ export class CommentStore {
       filePath = vscode.workspace.asRelativePath(uri);
     }
 
-    const meta = this.threadMeta.get(thread);
     const side: DiffSide =
-      revision === meta?.diffContext.baseRevision
+      revision === this._diffContext.baseRevision
         ? "before"
         : "after";
 
@@ -120,9 +132,7 @@ export class CommentStore {
       endLine: range.end.line + 1,
       body,
       side,
-      baseRevision: meta?.diffContext.baseRevision ?? "",
-      headRevision: meta?.diffContext.headRevision ?? "",
-      codeContext: meta?.codeContext ?? "",
+      codeContext: this.threadCodeContext.get(thread) ?? "",
     };
   }
 
@@ -143,18 +153,14 @@ export class CommentStore {
 
   getThreads(): ReadonlyArray<{
     thread: vscode.CommentThread;
-    meta: ThreadMeta | undefined;
   }> {
-    return this.threads.map((thread) => ({
-      thread,
-      meta: this.threadMeta.get(thread),
-    }));
+    return this.threads.map((thread) => ({ thread }));
   }
 
   deleteThread(thread: vscode.CommentThread): void {
     const idx = this.threads.indexOf(thread);
     if (idx !== -1) {
-      this.threadMeta.delete(thread);
+      this.threadCodeContext.delete(thread);
       thread.dispose();
       this.threads.splice(idx, 1);
       this._onDidChange.fire();
@@ -175,7 +181,7 @@ export class CommentStore {
       thread.dispose();
     }
     this.threads = [];
-    this.threadMeta.clear();
+    this.threadCodeContext.clear();
     this._onDidChange.fire();
   }
 

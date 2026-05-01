@@ -35,7 +35,7 @@ export class CommentsTreeProvider
       const filePath =
         uri.scheme === "local-review-git"
           ? uri.path.slice(1)
-          : uri.fsPath;
+          : vscode.workspace.asRelativePath(uri);
 
       const startLine = (thread.range?.start.line ?? 0) + 1;
       const endLine = (thread.range?.end.line ?? 0) + 1;

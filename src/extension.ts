@@ -6,12 +6,18 @@ import { CommitsTreeProvider } from "./commitsTree";
 import { FilesTreeProvider } from "./filesTree";
 import { CommentsTreeProvider } from "./commentsTree";
 import { CommentStore } from "./commentStore";
-import { formatComment, formatReviewForClipboard } from "./export";
+import {
+  formatComment,
+  formatHeader,
+  formatReviewForClipboard,
+} from "./export";
+
+const SELECTION_LOCKED_MSG =
+  "Clear all comments before changing commit selection.";
 
 export async function activate(
   context: vscode.ExtensionContext
 ): Promise<void> {
-  // Determine repo root from the first workspace folder
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (!workspaceFolder) {
     vscode.window.showWarningMessage(
@@ -72,21 +78,25 @@ export async function activate(
     })
   );
 
-  // Wire up checkbox changes -> file list updates
+  // Wire up checkbox changes -> file list updates (blocked when comments exist)
   commitsTreeView.onDidChangeCheckboxState((e) => {
+    if (commentStore.hasComments()) {
+      // Revert the change by refreshing the tree
+      commitsTree.refreshTree();
+      vscode.window.showWarningMessage(SELECTION_LOCKED_MSG);
+      return;
+    }
     commitsTree.handleCheckboxChange(e.items);
   });
 
-  // Track the current diff's base/head so we can attach context to comments
-  let currentDiffContext = { baseRevision: "", headRevision: "" };
   let currentDiffFilePath = "";
 
   commitsTree.onSelectionChanged(async (selectedHashes) => {
     const effectiveBase = commitsTree.getEffectiveBase();
-    currentDiffContext = {
+    commentStore.setDiffContext({
       baseRevision: effectiveBase,
       headRevision: selectedHashes.length > 0 ? selectedHashes[0] : "",
-    };
+    });
     await filesTree.updateFiles(selectedHashes, effectiveBase);
 
     // Re-open the current diff with the new base/head
@@ -95,7 +105,7 @@ export async function activate(
         "localReview.openDiff",
         currentDiffFilePath,
         effectiveBase,
-        currentDiffContext.headRevision
+        commentStore.diffContext.headRevision
       );
     }
   });
@@ -103,12 +113,20 @@ export async function activate(
   // Commands
   context.subscriptions.push(
     vscode.commands.registerCommand("localReview.selectAll", () => {
+      if (commentStore.hasComments()) {
+        vscode.window.showWarningMessage(SELECTION_LOCKED_MSG);
+        return;
+      }
       commitsTree.setAll(true);
     })
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand("localReview.deselectAll", () => {
+      if (commentStore.hasComments()) {
+        vscode.window.showWarningMessage(SELECTION_LOCKED_MSG);
+        return;
+      }
       commitsTree.setAll(false);
     })
   );
@@ -131,10 +149,10 @@ export async function activate(
         headCommit: string
       ) => {
         currentDiffFilePath = filePath;
-        currentDiffContext = {
+        commentStore.setDiffContext({
           baseRevision: mergeBase,
           headRevision: headCommit,
-        };
+        });
         const leftUri = makeGitUri(mergeBase, filePath);
         const rightUri =
           headCommit === UNCOMMITTED
@@ -191,7 +209,7 @@ export async function activate(
     )
   );
 
-  // Comment creation — triggered by the "Save Comment" button in the comment widget
+  // Comment creation
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "localReview.createComment",
@@ -199,7 +217,6 @@ export async function activate(
         const range =
           reply.thread.range ?? new vscode.Range(0, 0, 0, 0);
 
-        // Capture the code at the commented range
         let codeContext = "";
         const doc = vscode.workspace.textDocuments.find(
           (d) => d.uri.toString() === reply.thread.uri.toString()
@@ -219,10 +236,8 @@ export async function activate(
           reply.thread.uri,
           range,
           reply.text,
-          { ...currentDiffContext },
           codeContext
         );
-        // Dispose the empty draft thread that VS Code created
         reply.thread.dispose();
       }
     )
@@ -245,7 +260,6 @@ export async function activate(
       async (item: { thread: vscode.CommentThread }) => {
         const uri = item.thread.uri;
         const range = item.thread.range;
-        // Open the document and reveal the comment range
         const doc = await vscode.workspace.openTextDocument(uri);
         const editor = await vscode.window.showTextDocument(doc, {
           preview: true,
@@ -284,7 +298,10 @@ export async function activate(
         if (!comment) {
           return;
         }
-        await vscode.env.clipboard.writeText(formatComment(comment));
+        const header = formatHeader(commentStore.diffContext);
+        await vscode.env.clipboard.writeText(
+          `${header}\n\n${formatComment(comment)}`
+        );
         vscode.window.showInformationMessage(
           "Copied comment to clipboard"
         );
