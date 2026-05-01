@@ -22,6 +22,7 @@ export class CommentStore {
   private commentController: vscode.CommentController;
   private threads: vscode.CommentThread[] = [];
   private threadMeta = new Map<vscode.CommentThread, ThreadMeta>();
+  private reviewFileUris = new Set<string>();
 
   private _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
@@ -36,7 +37,10 @@ export class CommentStore {
       provideCommentingRanges: (
         document: vscode.TextDocument
       ): vscode.Range[] => {
-        if (document.uri.scheme === "local-review-git") {
+        if (
+          document.uri.scheme === "local-review-git" ||
+          this.reviewFileUris.has(document.uri.toString())
+        ) {
           return [
             new vscode.Range(0, 0, document.lineCount - 1, 0),
           ];
@@ -44,6 +48,10 @@ export class CommentStore {
         return [];
       },
     };
+  }
+
+  addReviewFileUri(uri: vscode.Uri): void {
+    this.reviewFileUris.add(uri.toString());
   }
 
   addThread(

@@ -92,10 +92,18 @@ export async function getChangedFiles(
     return [];
   }
 
-  // Get files changed in each selected commit individually (not cumulative)
   const fileMap = new Map<string, string>();
 
   for (const hash of commitHashes) {
+    // Handle uncommitted changes separately
+    if (hash === "uncommitted") {
+      const uncommitted = await getUncommittedFiles(cwd);
+      for (const file of uncommitted) {
+        fileMap.set(file.path, file.status);
+      }
+      continue;
+    }
+
     let output: string;
     try {
       output = await git(
@@ -138,6 +146,67 @@ export async function getFileAtRevision(
     // File didn't exist at this revision (e.g. newly added)
     return "";
   }
+}
+
+export async function hasUncommittedChanges(
+  cwd: string
+): Promise<boolean> {
+  try {
+    const output = await git(cwd, "status", "--porcelain");
+    return output.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+export async function getUncommittedFiles(
+  cwd: string
+): Promise<ChangedFile[]> {
+  const fileMap = new Map<string, string>();
+
+  // Staged + unstaged changes vs HEAD
+  let output: string;
+  try {
+    output = await git(cwd, "diff", "--name-status", "HEAD");
+  } catch {
+    // No HEAD yet (empty repo), try against empty tree
+    output = await git(
+      cwd,
+      "diff",
+      "--name-status",
+      "--cached"
+    );
+  }
+
+  if (output) {
+    for (const line of output.split("\n")) {
+      const match = line.match(/^([AMDRC])\t(.+)$/);
+      if (match) {
+        fileMap.set(match[2], match[1]);
+      }
+    }
+  }
+
+  // Also pick up untracked files
+  try {
+    const untracked = await git(
+      cwd,
+      "ls-files",
+      "--others",
+      "--exclude-standard"
+    );
+    if (untracked) {
+      for (const path of untracked.split("\n")) {
+        fileMap.set(path, "A");
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return Array.from(fileMap.entries())
+    .map(([path, status]) => ({ path, status }))
+    .sort((a, b) => a.path.localeCompare(b.path));
 }
 
 export async function getRepoRoot(cwd: string): Promise<string> {

@@ -1,5 +1,12 @@
 import * as vscode from "vscode";
-import { getCommits, getMainBranch, getMergeBase } from "./git";
+import {
+  getCommits,
+  getMainBranch,
+  getMergeBase,
+  hasUncommittedChanges,
+} from "./git";
+
+export const UNCOMMITTED = "uncommitted";
 
 interface CommitItem {
   hash: string;
@@ -53,6 +60,19 @@ export class CommitsTreeProvider
 
     const commits = await getCommits(this.cwd, mainBranch);
     this.commits = commits.map((c) => ({ ...c, checked: true }));
+
+    // Add virtual "uncommitted changes" entry at the top if there are any
+    if (await hasUncommittedChanges(this.cwd)) {
+      this.commits.unshift({
+        hash: UNCOMMITTED,
+        shortHash: "-------",
+        subject: "Uncommitted changes",
+        author: "",
+        date: "",
+        checked: true,
+      });
+    }
+
     this._onDidChangeTreeData.fire(undefined);
     this._onSelectionChanged.fire(this.getSelectedHashes());
   }
@@ -62,8 +82,13 @@ export class CommitsTreeProvider
       element.subject,
       vscode.TreeItemCollapsibleState.None
     );
-    item.description = `${element.shortHash} - ${element.author} (${element.date})`;
-    item.tooltip = `${element.hash}\n${element.subject}\n${element.author} - ${element.date}`;
+    if (element.hash === UNCOMMITTED) {
+      item.description = "working tree";
+      item.tooltip = "Staged and unstaged changes";
+    } else {
+      item.description = `${element.shortHash} - ${element.author} (${element.date})`;
+      item.tooltip = `${element.hash}\n${element.subject}\n${element.author} - ${element.date}`;
+    }
     item.checkboxState = element.checked
       ? vscode.TreeItemCheckboxState.Checked
       : vscode.TreeItemCheckboxState.Unchecked;

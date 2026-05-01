@@ -8,7 +8,9 @@ export function formatComment(comment: StoredComment): string {
 
   const side = comment.side === "before" ? "old code" : "new code";
 
-  const diffRange = `${comment.baseRevision.slice(0, 7)}..${comment.headRevision.slice(0, 7)}`;
+  const shortRev = (rev: string) =>
+    rev === "uncommitted" ? rev : rev.slice(0, 7);
+  const diffRange = `${shortRev(comment.baseRevision)}..${shortRev(comment.headRevision)}`;
 
   const lines: string[] = [];
   lines.push(

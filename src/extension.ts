@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { getRepoRoot } from "./git";
+import { UNCOMMITTED } from "./commitsTree";
 import { GitContentProvider, makeGitUri } from "./gitContentProvider";
 import { CommitsTreeProvider } from "./commitsTree";
 import { FilesTreeProvider } from "./filesTree";
@@ -78,6 +79,7 @@ export async function activate(
 
   // Track the current diff's base/head so we can attach context to comments
   let currentDiffContext = { baseRevision: "", headRevision: "" };
+  let currentDiffFilePath = "";
 
   commitsTree.onSelectionChanged(async (selectedHashes) => {
     const effectiveBase = commitsTree.getEffectiveBase();
@@ -86,6 +88,16 @@ export async function activate(
       headRevision: selectedHashes.length > 0 ? selectedHashes[0] : "",
     };
     await filesTree.updateFiles(selectedHashes, effectiveBase);
+
+    // Re-open the current diff with the new base/head
+    if (currentDiffFilePath) {
+      await vscode.commands.executeCommand(
+        "localReview.openDiff",
+        currentDiffFilePath,
+        effectiveBase,
+        currentDiffContext.headRevision
+      );
+    }
   });
 
   // Commands
@@ -118,12 +130,19 @@ export async function activate(
         mergeBase: string,
         headCommit: string
       ) => {
+        currentDiffFilePath = filePath;
         currentDiffContext = {
           baseRevision: mergeBase,
           headRevision: headCommit,
         };
         const leftUri = makeGitUri(mergeBase, filePath);
-        const rightUri = makeGitUri(headCommit, filePath);
+        const rightUri =
+          headCommit === UNCOMMITTED
+            ? vscode.Uri.file(`${cwd}/${filePath}`)
+            : makeGitUri(headCommit, filePath);
+        if (headCommit === UNCOMMITTED) {
+          commentStore.addReviewFileUri(rightUri);
+        }
         const title = `${filePath} (review)`;
         await vscode.commands.executeCommand(
           "vscode.diff",
