@@ -49,6 +49,18 @@
         "icon": "$(clippy)"
       },
       {
+        "command": "localReview.selectAll",
+        "title": "Select All",
+        "category": "Local Review",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "localReview.deselectAll",
+        "title": "Deselect All",
+        "category": "Local Review",
+        "icon": "$(close-all)"
+      },
+      {
         "command": "localReview.openDiff",
         "title": "Open Diff",
         "category": "Local Review"
@@ -93,7 +105,17 @@
         {
           "command": "localReview.refresh",
           "when": "view == localReview.commits",
-          "group": "navigation"
+          "group": "navigation@3"
+        },
+        {
+          "command": "localReview.deselectAll",
+          "when": "view == localReview.commits",
+          "group": "navigation@2"
+        },
+        {
+          "command": "localReview.selectAll",
+          "when": "view == localReview.commits",
+          "group": "navigation@1"
         },
         {
           "command": "localReview.copyReview",

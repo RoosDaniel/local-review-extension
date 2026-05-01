@@ -90,6 +90,18 @@ export async function activate(
 
   // Commands
   context.subscriptions.push(
+    vscode.commands.registerCommand("localReview.selectAll", () => {
+      commitsTree.setAll(true);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("localReview.deselectAll", () => {
+      commitsTree.setAll(false);
+    })
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerCommand(
       "localReview.refresh",
       async () => {

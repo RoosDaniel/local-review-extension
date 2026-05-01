@@ -75,6 +75,14 @@ export class CommitsTreeProvider
     return this.commits;
   }
 
+  setAll(checked: boolean): void {
+    for (const commit of this.commits) {
+      commit.checked = checked;
+    }
+    this._onDidChangeTreeData.fire(undefined);
+    this._onSelectionChanged.fire(this.getSelectedHashes());
+  }
+
   handleCheckboxChange(
     items: ReadonlyArray<[CommitItem, vscode.TreeItemCheckboxState]>
   ): void {
