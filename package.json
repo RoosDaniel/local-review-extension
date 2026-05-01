@@ -1,0 +1,147 @@
+{
+  "name": "local-review",
+  "displayName": "Local Review",
+  "description": "Review local git changes with inline comments and export to clipboard",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "local-review",
+          "title": "Local Review",
+          "icon": "$(git-compare)"
+        }
+      ]
+    },
+    "views": {
+      "local-review": [
+        {
+          "id": "localReview.commits",
+          "name": "Commits"
+        },
+        {
+          "id": "localReview.files",
+          "name": "Changed Files"
+        },
+        {
+          "id": "localReview.comments",
+          "name": "Comments"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "localReview.refresh",
+        "title": "Refresh",
+        "category": "Local Review",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "localReview.copyReview",
+        "title": "Copy Review to Clipboard",
+        "category": "Local Review",
+        "icon": "$(clippy)"
+      },
+      {
+        "command": "localReview.openDiff",
+        "title": "Open Diff",
+        "category": "Local Review"
+      },
+      {
+        "command": "localReview.clearComments",
+        "title": "Clear All Comments",
+        "category": "Local Review",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "localReview.createComment",
+        "title": "Save Comment",
+        "category": "Local Review"
+      },
+      {
+        "command": "localReview.deleteComment",
+        "title": "Delete Comment",
+        "category": "Local Review",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "localReview.goToComment",
+        "title": "Go to Comment",
+        "category": "Local Review"
+      },
+      {
+        "command": "localReview.deleteCommentFromTree",
+        "title": "Delete",
+        "category": "Local Review",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "localReview.copyComment",
+        "title": "Copy to Clipboard",
+        "category": "Local Review",
+        "icon": "$(clippy)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "localReview.refresh",
+          "when": "view == localReview.commits",
+          "group": "navigation"
+        },
+        {
+          "command": "localReview.copyReview",
+          "when": "view == localReview.comments",
+          "group": "navigation@1"
+        },
+        {
+          "command": "localReview.clearComments",
+          "when": "view == localReview.comments",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "localReview.copyComment",
+          "when": "view == localReview.comments",
+          "group": "inline"
+        },
+        {
+          "command": "localReview.deleteCommentFromTree",
+          "when": "view == localReview.comments",
+          "group": "inline"
+        }
+      ],
+      "comments/commentThread/context": [
+        {
+          "command": "localReview.createComment",
+          "group": "inline",
+          "when": "commentController == localReview && commentThreadIsEmpty"
+        }
+      ],
+      "comments/comment/context": [
+        {
+          "command": "localReview.deleteComment",
+          "group": "inline",
+          "when": "commentController == localReview"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  }
+}
