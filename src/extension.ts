@@ -10,6 +10,7 @@ import { CommitsTreeProvider } from "./commitsTree";
 import { FilesTreeProvider } from "./filesTree";
 import { CommentsTreeProvider } from "./commentsTree";
 import { CommentStore } from "./commentStore";
+import { ApprovalStore } from "./approvalStore";
 import {
   formatSingleComment,
   formatReviewForClipboard,
@@ -54,9 +55,15 @@ export async function activate(
     dispose: () => commentStore.dispose(),
   });
 
+  // Approval store
+  const approvalStore = new ApprovalStore(context.workspaceState);
+  context.subscriptions.push({
+    dispose: () => approvalStore.dispose(),
+  });
+
   // Tree providers
   const commitsTree = new CommitsTreeProvider(cwd);
-  const filesTree = new FilesTreeProvider(cwd);
+  const filesTree = new FilesTreeProvider(cwd, approvalStore);
 
   const commitsTreeView = vscode.window.createTreeView(
     "localReview.commits",
@@ -67,11 +74,25 @@ export async function activate(
   );
   context.subscriptions.push(commitsTreeView);
 
-  context.subscriptions.push(
-    vscode.window.createTreeView("localReview.files", {
+  const filesTreeView = vscode.window.createTreeView(
+    "localReview.files",
+    {
       treeDataProvider: filesTree,
-    })
+      manageCheckboxStateManually: true,
+    }
   );
+  context.subscriptions.push(filesTreeView);
+
+  filesTreeView.onDidChangeCheckboxState((e) => {
+    for (const [file, state] of e.items) {
+      const commits = filesTree.getCommitsForFile(file.path);
+      if (state === vscode.TreeItemCheckboxState.Checked) {
+        approvalStore.approve(file.path, commits);
+      } else {
+        approvalStore.unapprove(file.path, commits);
+      }
+    }
+  });
 
   // Comments panel
   const commentsTree = new CommentsTreeProvider(commentStore);

@@ -135,6 +135,44 @@ export async function getChangedFiles(
     .sort((a, b) => a.path.localeCompare(b.path));
 }
 
+/** Returns which commits touched each file: filePath -> set of commit hashes. */
+export async function getFileCommitMap(
+  cwd: string,
+  commitHashes: string[]
+): Promise<Map<string, Set<string>>> {
+  const result = new Map<string, Set<string>>();
+
+  for (const hash of commitHashes) {
+    let files: string[];
+    if (hash === "uncommitted") {
+      const uncommitted = await getUncommittedFiles(cwd);
+      files = uncommitted.map((f) => f.path);
+    } else {
+      try {
+        const output = await git(
+          cwd,
+          "diff-tree",
+          "--no-commit-id",
+          "--name-only",
+          "-r",
+          hash
+        );
+        files = output ? output.split("\n") : [];
+      } catch {
+        continue;
+      }
+    }
+
+    for (const file of files) {
+      const set = result.get(file) ?? new Set();
+      set.add(hash);
+      result.set(file, set);
+    }
+  }
+
+  return result;
+}
+
 export async function getFileAtRevision(
   cwd: string,
   revision: string,
