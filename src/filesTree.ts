@@ -14,19 +14,32 @@ const STATUS_LABELS: Record<string, string> = {
   C: "Copied",
 };
 
+type GroupLabel = "Unreviewed" | "Reviewed";
+
+interface GroupItem {
+  kind: "group";
+  label: GroupLabel;
+}
+
+interface FileItem {
+  kind: "file";
+  file: ChangedFile;
+}
+
+type TreeNode = GroupItem | FileItem;
+
 export class FilesTreeProvider
-  implements vscode.TreeDataProvider<ChangedFile>
+  implements vscode.TreeDataProvider<TreeNode>
 {
   private files: ChangedFile[] = [];
   private cwd: string;
   private mergeBase = "";
   private headCommit = "";
   private selectedHashes: string[] = [];
-  // filePath -> set of commit hashes that modified it
   private fileCommitMap = new Map<string, Set<string>>();
 
   private _onDidChangeTreeData =
-    new vscode.EventEmitter<ChangedFile | undefined>();
+    new vscode.EventEmitter<TreeNode | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   constructor(
@@ -63,48 +76,101 @@ export class FilesTreeProvider
     return this.fileCommitMap.get(filePath) ?? new Set();
   }
 
-  getTreeItem(element: ChangedFile): vscode.TreeItem {
-    const label = element.path.split("/").pop() ?? element.path;
+  private isFileApproved(file: ChangedFile): boolean {
+    const commits = this.getCommitsForFile(file.path);
+    if (commits.has("uncommitted") || commits.size === 0) {
+      return false;
+    }
+    return this.approvalStore.isApproved(file.path, commits);
+  }
+
+  getTreeItem(element: TreeNode): vscode.TreeItem {
+    if (element.kind === "group") {
+      const item = new vscode.TreeItem(
+        element.label,
+        vscode.TreeItemCollapsibleState.Expanded
+      );
+      const count = this.getGroupFiles(element.label).length;
+      item.description = `${count}`;
+      return item;
+    }
+
+    const { file } = element;
+    const label = file.path.split("/").pop() ?? file.path;
     const item = new vscode.TreeItem(
       label,
       vscode.TreeItemCollapsibleState.None
     );
-    const dir = element.path.includes("/")
-      ? element.path.slice(0, element.path.length - label.length - 1)
+    const dir = file.path.includes("/")
+      ? file.path.slice(
+          0,
+          file.path.length - label.length - 1
+        )
       : undefined;
     const statusLabel =
-      STATUS_LABELS[element.status] ?? element.status;
+      STATUS_LABELS[file.status] ?? file.status;
 
     item.description = `${dir ?? ""} [${statusLabel}]`.trim();
-    item.tooltip = `${element.path} (${statusLabel})`;
+    item.tooltip = `${file.path} (${statusLabel})`;
     item.resourceUri = vscode.Uri.file(
-      `${this.cwd}/${element.path}`
+      `${this.cwd}/${file.path}`
     );
     item.command = {
       command: "localReview.openDiff",
       title: "Open Diff",
-      arguments: [element.path, this.mergeBase, this.headCommit],
+      arguments: [file.path, this.mergeBase, this.headCommit],
     };
 
-    const commits = this.getCommitsForFile(element.path);
+    const commits = this.getCommitsForFile(file.path);
     if (!commits.has("uncommitted") && commits.size > 0) {
       const approved = this.approvalStore.isApproved(
-        element.path,
+        file.path,
         commits
       );
       item.checkboxState = approved
-        ? { state: vscode.TreeItemCheckboxState.Checked, tooltip: "Reviewed" }
-        : { state: vscode.TreeItemCheckboxState.Unchecked, tooltip: "Unreviewed" };
+        ? {
+            state: vscode.TreeItemCheckboxState.Checked,
+            tooltip: "Mark as unreviewed",
+          }
+        : {
+            state: vscode.TreeItemCheckboxState.Unchecked,
+            tooltip: "Mark as reviewed",
+          };
     }
 
     return item;
+  }
+
+  private getGroupFiles(label: GroupLabel): ChangedFile[] {
+    if (label === "Reviewed") {
+      return this.files.filter((f) => this.isFileApproved(f));
+    }
+    return this.files.filter((f) => !this.isFileApproved(f));
   }
 
   refreshTree(): void {
     this._onDidChangeTreeData.fire(undefined);
   }
 
-  getChildren(): ChangedFile[] {
-    return this.files;
+  getChildren(element?: TreeNode): TreeNode[] {
+    if (!element) {
+      const unreviewed = this.getGroupFiles("Unreviewed");
+      const reviewed = this.getGroupFiles("Reviewed");
+      const groups: TreeNode[] = [];
+      if (unreviewed.length > 0) {
+        groups.push({ kind: "group", label: "Unreviewed" });
+      }
+      if (reviewed.length > 0) {
+        groups.push({ kind: "group", label: "Reviewed" });
+      }
+      return groups;
+    }
+    if (element.kind === "group") {
+      return this.getGroupFiles(element.label).map((file) => ({
+        kind: "file",
+        file,
+      }));
+    }
+    return [];
   }
 }

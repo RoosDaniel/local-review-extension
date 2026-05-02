@@ -84,12 +84,13 @@ export async function activate(
   context.subscriptions.push(filesTreeView);
 
   filesTreeView.onDidChangeCheckboxState((e) => {
-    for (const [file, state] of e.items) {
-      const commits = filesTree.getCommitsForFile(file.path);
+    for (const [node, state] of e.items) {
+      if (node.kind !== "file") continue;
+      const commits = filesTree.getCommitsForFile(node.file.path);
       if (state === vscode.TreeItemCheckboxState.Checked) {
-        approvalStore.approve(file.path, commits);
+        approvalStore.approve(node.file.path, commits);
       } else {
-        approvalStore.unapprove(file.path, commits);
+        approvalStore.unapprove(node.file.path, commits);
       }
     }
   });
