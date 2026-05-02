@@ -16,11 +16,25 @@ npm run compile          # or npm run watch
 
 ```bash
 npx @vscode/vsce package
-gh release create v<version> local-review-<version>.vsix --title "v<version>"
-cursor --install-extension local-review-<version>.vsix
+cursor --install-extension local-llm-review-<version>.vsix
+gh release create v<version> local-llm-review-<version>.vsix --title "v<version>"
 ```
 
 Always bump the version in `package.json` before packaging — don't reuse version numbers.
+
+### Publishing to Marketplaces
+
+**VS Code Marketplace** (publisher: `danielroos`):
+```bash
+npx @vscode/vsce publish
+```
+Login: `npx @vscode/vsce login danielroos` with a PAT from https://dev.azure.com (scope: Marketplace > Manage).
+
+**Open VSX** (for Cursor):
+```bash
+npx ovsx publish local-llm-review-<version>.vsix -p <token>
+```
+Token from https://open-vsx.org/user-settings/tokens. Namespace `danielroos` is already claimed.
 
 ## Architecture
 

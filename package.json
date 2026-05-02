@@ -1,8 +1,14 @@
 {
-  "name": "local-review",
-  "displayName": "Local Review",
+  "name": "local-llm-review",
+  "displayName": "Local LLM Review",
   "description": "Review local git changes with inline comments and export to clipboard",
   "version": "0.0.5",
+  "publisher": "danielroos",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RoosDaniel/local-review-extension"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
