@@ -22,7 +22,7 @@ function formatComment(
   const lines: string[] = [];
 
   lines.push(
-    `${indent}<comment file="${(comment.filePath)}" lines="${formatLines(comment)}" side="${side}">`
+    `${indent}<comment file="${(comment.filePath)}" lines="${formatLines(comment)}" side="${side}" type="${comment.type}">`
   );
 
   if (comment.codeContext) {

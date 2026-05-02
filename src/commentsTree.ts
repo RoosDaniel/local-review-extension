@@ -1,11 +1,12 @@
 import * as vscode from "vscode";
-import { CommentStore } from "./commentStore";
+import { CommentStore, type CommentType } from "./commentStore";
 
 interface CommentItem {
   thread: vscode.CommentThread;
   body: string;
   filePath: string;
   lineRange: string;
+  type: CommentType;
 }
 
 const MAX_LABEL_LENGTH = 60;
@@ -46,7 +47,8 @@ export class CommentsTreeProvider
           ? `${startLine}`
           : `${startLine}-${endLine}`;
 
-      return { thread, body, filePath, lineRange };
+      const type = this.store.getTypeForThread(thread);
+      return { thread, body, filePath, lineRange, type };
     });
 
     this._onDidChangeTreeData.fire(undefined);
@@ -64,7 +66,7 @@ export class CommentsTreeProvider
     );
 
     const fileName = element.filePath.split("/").pop() ?? element.filePath;
-    item.description = `${fileName}:${element.lineRange}`;
+    item.description = `[${element.type}] ${fileName}:${element.lineRange}`;
     item.tooltip = `${element.filePath}:${element.lineRange}\n\n${element.body}`;
 
     item.command = {

@@ -2,7 +2,7 @@
   "name": "local-review",
   "displayName": "Local Review",
   "description": "Review local git changes with inline comments and export to clipboard",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -78,7 +78,7 @@
       },
       {
         "command": "localReview.createComment",
-        "title": "Save Comment",
+        "title": "Save",
         "category": "Local Review"
       },
       {
@@ -129,8 +129,8 @@
         "icon": "$(clippy)"
       },
       {
-        "command": "localReview.createCommentAndCopy",
-        "title": "Save & Copy",
+        "command": "localReview.copyDraft",
+        "title": "Copy",
         "category": "Local Review",
         "icon": "$(clippy)"
       }
@@ -178,12 +178,12 @@
       "comments/commentThread/context": [
         {
           "command": "localReview.createComment",
-          "group": "inline",
+          "group": "inline@1",
           "when": "commentController == localReview && commentThreadIsEmpty"
         },
         {
-          "command": "localReview.createCommentAndCopy",
-          "group": "inline",
+          "command": "localReview.copyDraft",
+          "group": "inline@2",
           "when": "commentController == localReview && commentThreadIsEmpty"
         }
       ],

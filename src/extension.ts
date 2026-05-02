@@ -11,7 +11,12 @@ import { GitContentProvider, makeGitUri } from "./gitContentProvider";
 import { CommitsTreeProvider } from "./commitsTree";
 import { FilesTreeProvider } from "./filesTree";
 import { CommentsTreeProvider } from "./commentsTree";
-import { CommentStore, commentBody } from "./commentStore";
+import {
+  CommentStore,
+  commentBody,
+  COMMENT_TYPES,
+  type CommentType,
+} from "./commentStore";
 import { ApprovalStore } from "./approvalStore";
 import {
   formatSingleComment,
@@ -144,6 +149,14 @@ export async function activate(
       treeDataProvider: commentsTree,
     })
   );
+
+  async function pickCommentType(): Promise<CommentType | undefined> {
+    const picked = await vscode.window.showQuickPick(
+      COMMENT_TYPES.map((t) => ({ label: t })),
+      { placeHolder: "Comment type" }
+    );
+    return picked?.label;
+  }
 
   function requireNoComments(): boolean {
     if (commentStore.hasComments()) {
@@ -307,13 +320,16 @@ export async function activate(
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "localReview.createComment",
-      (reply: vscode.CommentReply) => {
+      async (reply: vscode.CommentReply) => {
+        const replyThread = reply.thread;
+        const replyText = reply.text;
         const range =
-          reply.thread.range ?? new vscode.Range(0, 0, 0, 0);
+          replyThread.range ?? new vscode.Range(0, 0, 0, 0);
+        const uri = replyThread.uri;
 
         let codeContext = "";
         const doc = vscode.workspace.textDocuments.find(
-          (d) => d.uri.toString() === reply.thread.uri.toString()
+          (d) => d.uri.toString() === uri.toString()
         );
         if (doc) {
           codeContext = doc.getText(
@@ -326,13 +342,57 @@ export async function activate(
           );
         }
 
-        commentStore.addThread(
-          reply.thread.uri,
-          range,
-          reply.text,
-          codeContext
+        const type = await pickCommentType();
+        if (!type) {
+          replyThread.dispose();
+          return;
+        }
+
+        commentStore.addThread(uri, range, replyText, codeContext, type);
+        replyThread.dispose();
+      }
+    )
+  );
+
+  // Copy comment to clipboard without saving (for quick one-off feedback)
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "localReview.copyDraft",
+      async (reply: vscode.CommentReply) => {
+        const replyThread = reply.thread;
+        const replyText = reply.text;
+        const range =
+          replyThread.range ?? new vscode.Range(0, 0, 0, 0);
+        const uri = replyThread.uri;
+
+        let codeContext = "";
+        const doc = vscode.workspace.textDocuments.find(
+          (d) => d.uri.toString() === uri.toString()
         );
-        reply.thread.dispose();
+        if (doc) {
+          codeContext = doc.getText(
+            new vscode.Range(
+              range.start.line,
+              0,
+              range.end.line,
+              doc.lineAt(range.end.line).text.length
+            )
+          );
+        }
+
+        const type = await pickCommentType();
+        if (!type) return;
+
+        const stored = commentStore.buildStoredComment(
+          uri, range, replyText, codeContext, type
+        );
+        await vscode.env.clipboard.writeText(
+          formatSingleComment(commentStore, stored)
+        );
+        replyThread.dispose();
+        vscode.window.showInformationMessage(
+          "Copied comment to clipboard"
+        );
       }
     )
   );
@@ -401,50 +461,6 @@ export async function activate(
         vscode.window.showInformationMessage(
           "Copied comment to clipboard"
         );
-      }
-    )
-  );
-
-  // Save comment and copy to clipboard
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      "localReview.createCommentAndCopy",
-      async (reply: vscode.CommentReply) => {
-        const range =
-          reply.thread.range ?? new vscode.Range(0, 0, 0, 0);
-
-        let codeContext = "";
-        const doc = vscode.workspace.textDocuments.find(
-          (d) => d.uri.toString() === reply.thread.uri.toString()
-        );
-        if (doc) {
-          codeContext = doc.getText(
-            new vscode.Range(
-              range.start.line,
-              0,
-              range.end.line,
-              doc.lineAt(range.end.line).text.length
-            )
-          );
-        }
-
-        const thread = commentStore.addThread(
-          reply.thread.uri,
-          range,
-          reply.text,
-          codeContext
-        );
-        reply.thread.dispose();
-
-        const stored = commentStore.getCommentForThread(thread);
-        if (stored) {
-          await vscode.env.clipboard.writeText(
-            formatSingleComment(commentStore, stored)
-          );
-          vscode.window.showInformationMessage(
-            "Saved and copied comment to clipboard"
-          );
-        }
       }
     )
   );

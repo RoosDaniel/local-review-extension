@@ -2,6 +2,15 @@ import * as vscode from "vscode";
 
 type DiffSide = "before" | "after";
 
+export type CommentType = "issue" | "suggestion" | "question" | "nitpick";
+
+export const COMMENT_TYPES: readonly CommentType[] = [
+  "issue",
+  "suggestion",
+  "question",
+  "nitpick",
+];
+
 export interface DiffContext {
   baseRevision: string;
   headRevision: string;
@@ -14,6 +23,7 @@ export interface StoredComment {
   body: string;
   side: DiffSide;
   codeContext: string;
+  type: CommentType;
 }
 
 interface PersistedComment {
@@ -22,6 +32,7 @@ interface PersistedComment {
   endLine: number;
   body: string;
   codeContext: string;
+  type: CommentType;
 }
 
 interface PersistedState {
@@ -41,6 +52,7 @@ export class CommentStore {
   private commentController: vscode.CommentController;
   private threads: vscode.CommentThread[] = [];
   private threadCodeContext = new Map<vscode.CommentThread, string>();
+  private threadCommentType = new Map<vscode.CommentThread, CommentType>();
   private editSnapshots = new Map<vscode.CommentThread, string>();
   private reviewFileUris = new Set<string>();
   private _diffContext: DiffContext = {
@@ -88,6 +100,7 @@ export class CommentStore {
         endLine: range?.end.line ?? 0,
         body,
         codeContext: this.threadCodeContext.get(thread) ?? "",
+        type: this.threadCommentType.get(thread) ?? "issue",
       };
     });
     const persisted: PersistedState = {
@@ -109,7 +122,7 @@ export class CommentStore {
       if (uri.scheme === "file") {
         this.reviewFileUris.add(uri.toString());
       }
-      this.addThread(uri, range, c.body, c.codeContext);
+      this.addThread(uri, range, c.body, c.codeContext, c.type ?? "issue");
     }
   }
 
@@ -128,6 +141,7 @@ export class CommentStore {
     }
     this.threads = [];
     this.threadCodeContext.clear();
+    this.threadCommentType.clear();
   }
 
   get diffContext(): DiffContext {
@@ -150,7 +164,8 @@ export class CommentStore {
     uri: vscode.Uri,
     range: vscode.Range,
     body: string,
-    codeContext: string
+    codeContext: string,
+    type: CommentType
   ): vscode.CommentThread {
     const thread = this.commentController.createCommentThread(
       uri,
@@ -159,7 +174,7 @@ export class CommentStore {
         {
           body: new vscode.MarkdownString(body),
           mode: vscode.CommentMode.Preview,
-          author: { name: "Review" },
+          author: { name: `Review [${type}]` },
         },
       ]
     );
@@ -168,9 +183,44 @@ export class CommentStore {
       vscode.CommentThreadCollapsibleState.Expanded;
     this.threads.push(thread);
     this.threadCodeContext.set(thread, codeContext);
+    this.threadCommentType.set(thread, type);
     this.persist();
     this._onDidChange.fire();
     return thread;
+  }
+
+  getTypeForThread(thread: vscode.CommentThread): CommentType {
+    return this.threadCommentType.get(thread) ?? "issue";
+  }
+
+  buildStoredComment(
+    uri: vscode.Uri,
+    range: vscode.Range,
+    body: string,
+    codeContext: string,
+    type: CommentType
+  ): StoredComment {
+    let filePath: string;
+    let revision = "";
+    if (uri.scheme === "local-review-git") {
+      filePath = uri.path.slice(1);
+      revision = uri.authority;
+    } else {
+      filePath = vscode.workspace.asRelativePath(uri);
+    }
+
+    const side: DiffSide =
+      revision === this._diffContext.baseRevision ? "before" : "after";
+
+    return {
+      filePath,
+      startLine: range.start.line + 1,
+      endLine: range.end.line + 1,
+      body,
+      side,
+      codeContext,
+      type,
+    };
   }
 
   getCommentForThread(
@@ -205,6 +255,7 @@ export class CommentStore {
       body,
       side,
       codeContext: this.threadCodeContext.get(thread) ?? "",
+      type: this.threadCommentType.get(thread) ?? "issue",
     };
   }
 
@@ -233,6 +284,7 @@ export class CommentStore {
     const idx = this.threads.indexOf(thread);
     if (idx !== -1) {
       this.threadCodeContext.delete(thread);
+      this.threadCommentType.delete(thread);
       thread.dispose();
       this.threads.splice(idx, 1);
       this.rebuildReviewFileUris();
@@ -265,13 +317,17 @@ export class CommentStore {
     ];
   }
 
-  saveComment(thread: vscode.CommentThread, newBody: string): void {
+  saveComment(thread: vscode.CommentThread, newBody: string, newType?: CommentType): void {
     this.editSnapshots.delete(thread);
+    const type = newType ?? this.getTypeForThread(thread);
+    if (newType) {
+      this.threadCommentType.set(thread, newType);
+    }
     thread.comments = [
       {
         body: new vscode.MarkdownString(newBody),
         mode: vscode.CommentMode.Preview,
-        author: { name: "Review" },
+        author: { name: `Review [${type}]` },
       },
     ];
     this.persist();
@@ -282,11 +338,12 @@ export class CommentStore {
     const original = this.editSnapshots.get(thread);
     if (original === undefined) return;
     this.editSnapshots.delete(thread);
+    const type = this.getTypeForThread(thread);
     thread.comments = [
       {
         body: new vscode.MarkdownString(original),
         mode: vscode.CommentMode.Preview,
-        author: { name: "Review" },
+        author: { name: `Review [${type}]` },
       },
     ];
   }
