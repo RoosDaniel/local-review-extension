@@ -11,7 +11,7 @@ import { GitContentProvider, makeGitUri } from "./gitContentProvider";
 import { CommitsTreeProvider } from "./commitsTree";
 import { FilesTreeProvider } from "./filesTree";
 import { CommentsTreeProvider } from "./commentsTree";
-import { CommentStore } from "./commentStore";
+import { CommentStore, commentBody } from "./commentStore";
 import { ApprovalStore } from "./approvalStore";
 import {
   formatSingleComment,
@@ -343,6 +343,108 @@ export async function activate(
       "localReview.deleteComment",
       (comment: vscode.Comment) => {
         commentStore.deleteThreadByComment(comment);
+      }
+    )
+  );
+
+  // Edit comment (switch to editing mode)
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "localReview.editComment",
+      (comment: vscode.Comment) => {
+        const thread = commentStore.findThreadByComment(comment);
+        if (thread) {
+          commentStore.editComment(thread);
+        }
+      }
+    )
+  );
+
+  // Save edited comment
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "localReview.saveEdit",
+      (comment: vscode.Comment) => {
+        const thread = commentStore.findThreadByComment(comment);
+        if (thread) {
+          commentStore.saveComment(thread, commentBody(comment));
+        }
+      }
+    )
+  );
+
+  // Cancel edit
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "localReview.cancelEdit",
+      (comment: vscode.Comment) => {
+        const thread = commentStore.findThreadByComment(comment);
+        if (thread) {
+          commentStore.cancelEdit(thread);
+        }
+      }
+    )
+  );
+
+  // Copy single comment from inline dialog
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "localReview.copyCommentInline",
+      async (comment: vscode.Comment) => {
+        const thread = commentStore.findThreadByComment(comment);
+        if (!thread) return;
+        const stored = commentStore.getCommentForThread(thread);
+        if (!stored) return;
+        await vscode.env.clipboard.writeText(
+          formatSingleComment(commentStore, stored)
+        );
+        vscode.window.showInformationMessage(
+          "Copied comment to clipboard"
+        );
+      }
+    )
+  );
+
+  // Save comment and copy to clipboard
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "localReview.createCommentAndCopy",
+      async (reply: vscode.CommentReply) => {
+        const range =
+          reply.thread.range ?? new vscode.Range(0, 0, 0, 0);
+
+        let codeContext = "";
+        const doc = vscode.workspace.textDocuments.find(
+          (d) => d.uri.toString() === reply.thread.uri.toString()
+        );
+        if (doc) {
+          codeContext = doc.getText(
+            new vscode.Range(
+              range.start.line,
+              0,
+              range.end.line,
+              doc.lineAt(range.end.line).text.length
+            )
+          );
+        }
+
+        const thread = commentStore.addThread(
+          reply.thread.uri,
+          range,
+          reply.text,
+          codeContext
+        );
+        reply.thread.dispose();
+
+        const stored = commentStore.getCommentForThread(thread);
+        if (stored) {
+          await vscode.env.clipboard.writeText(
+            formatSingleComment(commentStore, stored)
+          );
+          vscode.window.showInformationMessage(
+            "Saved and copied comment to clipboard"
+          );
+        }
       }
     )
   );

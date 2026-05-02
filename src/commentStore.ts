@@ -31,7 +31,7 @@ interface PersistedState {
 
 const STORAGE_KEY = "reviewComments";
 
-function commentBody(comment: vscode.Comment): string {
+export function commentBody(comment: vscode.Comment): string {
   return typeof comment.body === "string"
     ? comment.body
     : comment.body.value;
@@ -41,6 +41,7 @@ export class CommentStore {
   private commentController: vscode.CommentController;
   private threads: vscode.CommentThread[] = [];
   private threadCodeContext = new Map<vscode.CommentThread, string>();
+  private editSnapshots = new Map<vscode.CommentThread, string>();
   private reviewFileUris = new Set<string>();
   private _diffContext: DiffContext = {
     baseRevision: "",
@@ -240,13 +241,54 @@ export class CommentStore {
     }
   }
 
+  findThreadByComment(comment: vscode.Comment): vscode.CommentThread | undefined {
+    return this.threads.find((t) => t.comments.includes(comment));
+  }
+
   deleteThreadByComment(comment: vscode.Comment): void {
-    const thread = this.threads.find((t) =>
-      t.comments.includes(comment)
-    );
+    const thread = this.findThreadByComment(comment);
     if (thread) {
       this.deleteThread(thread);
     }
+  }
+
+  editComment(thread: vscode.CommentThread): void {
+    const comment = thread.comments[0];
+    if (!comment) return;
+    this.editSnapshots.set(thread, commentBody(comment));
+    thread.comments = [
+      {
+        body: commentBody(comment),
+        mode: vscode.CommentMode.Editing,
+        author: comment.author,
+      },
+    ];
+  }
+
+  saveComment(thread: vscode.CommentThread, newBody: string): void {
+    this.editSnapshots.delete(thread);
+    thread.comments = [
+      {
+        body: new vscode.MarkdownString(newBody),
+        mode: vscode.CommentMode.Preview,
+        author: { name: "Review" },
+      },
+    ];
+    this.persist();
+    this._onDidChange.fire();
+  }
+
+  cancelEdit(thread: vscode.CommentThread): void {
+    const original = this.editSnapshots.get(thread);
+    if (original === undefined) return;
+    this.editSnapshots.delete(thread);
+    thread.comments = [
+      {
+        body: new vscode.MarkdownString(original),
+        mode: vscode.CommentMode.Preview,
+        author: { name: "Review" },
+      },
+    ];
   }
 
   clearAll(): void {

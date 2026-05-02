@@ -103,6 +103,36 @@
         "title": "Copy to Clipboard",
         "category": "Local Review",
         "icon": "$(clippy)"
+      },
+      {
+        "command": "localReview.editComment",
+        "title": "Edit",
+        "category": "Local Review",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "localReview.saveEdit",
+        "title": "Save",
+        "category": "Local Review",
+        "icon": "$(check)"
+      },
+      {
+        "command": "localReview.cancelEdit",
+        "title": "Cancel",
+        "category": "Local Review",
+        "icon": "$(close)"
+      },
+      {
+        "command": "localReview.copyCommentInline",
+        "title": "Copy to Clipboard",
+        "category": "Local Review",
+        "icon": "$(clippy)"
+      },
+      {
+        "command": "localReview.createCommentAndCopy",
+        "title": "Save & Copy",
+        "category": "Local Review",
+        "icon": "$(clippy)"
       }
     ],
     "menus": {
@@ -150,12 +180,39 @@
           "command": "localReview.createComment",
           "group": "inline",
           "when": "commentController == localReview && commentThreadIsEmpty"
+        },
+        {
+          "command": "localReview.createCommentAndCopy",
+          "group": "inline",
+          "when": "commentController == localReview && commentThreadIsEmpty"
+        }
+      ],
+      "comments/comment/title": [
+        {
+          "command": "localReview.editComment",
+          "group": "inline@1",
+          "when": "commentController == localReview"
+        },
+        {
+          "command": "localReview.copyCommentInline",
+          "group": "inline@2",
+          "when": "commentController == localReview"
+        },
+        {
+          "command": "localReview.deleteComment",
+          "group": "inline@3",
+          "when": "commentController == localReview"
         }
       ],
       "comments/comment/context": [
         {
-          "command": "localReview.deleteComment",
-          "group": "inline",
+          "command": "localReview.saveEdit",
+          "group": "inline@1",
+          "when": "commentController == localReview"
+        },
+        {
+          "command": "localReview.cancelEdit",
+          "group": "inline@2",
           "when": "commentController == localReview"
         }
       ]
