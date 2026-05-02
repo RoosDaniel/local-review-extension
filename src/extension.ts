@@ -2,7 +2,9 @@ import * as vscode from "vscode";
 import {
   fileHasUncommittedChanges,
   getHeadHash,
+  getRepoId,
   getRepoRoot,
+  log,
 } from "./git";
 import { UNCOMMITTED } from "./commitsTree";
 import { GitContentProvider, makeGitUri } from "./gitContentProvider";
@@ -18,6 +20,26 @@ import {
 
 const SELECTION_LOCKED_MSG =
   "Clear all comments before changing commit selection.";
+
+/** Wraps a Memento to prefix all keys, scoping storage to a specific repo. */
+function scopedMemento(
+  memento: vscode.Memento,
+  prefix: string
+): vscode.Memento {
+  return {
+    keys: () =>
+      memento
+        .keys()
+        .filter((k) => k.startsWith(prefix))
+        .map((k) => k.slice(prefix.length)),
+    get<T>(key: string, defaultValue?: T): T {
+      return memento.get(`${prefix}${key}`, defaultValue) as T;
+    },
+    update(key: string, value: unknown): Thenable<void> {
+      return memento.update(`${prefix}${key}`, value);
+    },
+  };
+}
 
 export async function activate(
   context: vscode.ExtensionContext
@@ -40,6 +62,14 @@ export async function activate(
     return;
   }
 
+  context.subscriptions.push(log);
+
+  const repoId = await getRepoId(cwd);
+  const state = scopedMemento(
+    context.globalState,
+    `repo:${repoId}:`
+  );
+
   // Git content provider for viewing files at specific revisions
   const gitContentProvider = new GitContentProvider(cwd);
   context.subscriptions.push(
@@ -55,15 +85,22 @@ export async function activate(
     dispose: () => commentStore.dispose(),
   });
 
-  // Approval store
-  const approvalStore = new ApprovalStore(context.workspaceState);
+  // Approval store (shared across worktrees via globalState)
+  const approvalStore = new ApprovalStore(state);
   context.subscriptions.push({
     dispose: () => approvalStore.dispose(),
   });
 
   // Tree providers
   const commitsTree = new CommitsTreeProvider(cwd, context.workspaceState);
+  context.subscriptions.push({
+    dispose: () => commitsTree.dispose(),
+  });
+
   const filesTree = new FilesTreeProvider(cwd, approvalStore);
+  context.subscriptions.push({
+    dispose: () => filesTree.dispose(),
+  });
 
   const commitsTreeView = vscode.window.createTreeView(
     "localReview.commits",
@@ -83,89 +120,100 @@ export async function activate(
   );
   context.subscriptions.push(filesTreeView);
 
-  filesTreeView.onDidChangeCheckboxState((e) => {
-    for (const [node, state] of e.items) {
-      if (node.kind !== "file") continue;
-      const commits = filesTree.getCommitsForFile(node.file.path);
-      if (state === vscode.TreeItemCheckboxState.Checked) {
-        approvalStore.approve(node.file.path, commits);
-      } else {
-        approvalStore.unapprove(node.file.path, commits);
+  context.subscriptions.push(
+    filesTreeView.onDidChangeCheckboxState((e) => {
+      for (const [node, state] of e.items) {
+        if (node.kind !== "file") continue;
+        const commits = filesTree.getCommitsForFile(node.file.path);
+        if (state === vscode.TreeItemCheckboxState.Checked) {
+          approvalStore.approve(node.file.path, commits);
+        } else {
+          approvalStore.unapprove(node.file.path, commits);
+        }
       }
-    }
-  });
+    })
+  );
 
   // Comments panel
   const commentsTree = new CommentsTreeProvider(commentStore);
+  context.subscriptions.push({
+    dispose: () => commentsTree.dispose(),
+  });
   context.subscriptions.push(
     vscode.window.createTreeView("localReview.comments", {
       treeDataProvider: commentsTree,
     })
   );
 
-  // Wire up checkbox changes -> file list updates (blocked when comments exist)
-  commitsTreeView.onDidChangeCheckboxState((e) => {
+  function requireNoComments(): boolean {
     if (commentStore.hasComments()) {
-      // Revert the change by refreshing the tree
-      commitsTree.refreshTree();
       vscode.window.showWarningMessage(SELECTION_LOCKED_MSG);
-      return;
+      return false;
     }
-    commitsTree.handleCheckboxChange(e.items);
-  });
+    return true;
+  }
+
+  // Wire up checkbox changes -> file list updates (blocked when comments exist)
+  context.subscriptions.push(
+    commitsTreeView.onDidChangeCheckboxState((e) => {
+      if (!requireNoComments()) {
+        commitsTree.refreshTree();
+        return;
+      }
+      commitsTree.handleCheckboxChange(e.items);
+    })
+  );
 
   // Toggle commit via click (same lock logic as checkbox)
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "localReview.toggleCommit",
       (item: { hash: string }) => {
-        if (commentStore.hasComments()) {
-          vscode.window.showWarningMessage(SELECTION_LOCKED_MSG);
-          return;
-        }
+        if (!requireNoComments()) return;
         commitsTree.toggleCommit(item.hash);
       }
     )
   );
 
   let currentDiffFilePath = "";
+  let selectionGeneration = 0;
 
-  commitsTree.onSelectionChanged(async (selectedHashes) => {
-    const effectiveBase = commitsTree.getEffectiveBase();
-    commentStore.setDiffContext({
-      baseRevision: effectiveBase,
-      headRevision: selectedHashes.length > 0 ? selectedHashes[0] : "",
-    });
-    await filesTree.updateFiles(selectedHashes, effectiveBase);
+  context.subscriptions.push(
+    commitsTree.onSelectionChanged(async (selectedHashes) => {
+      const generation = ++selectionGeneration;
+      const effectiveBase = commitsTree.getEffectiveBase();
+      commentStore.setDiffContext({
+        baseRevision: effectiveBase,
+        headRevision: selectedHashes.length > 0 ? selectedHashes[0] : "",
+      });
+      await filesTree.updateFiles(selectedHashes, effectiveBase);
 
-    // Re-open the current diff with the new base/head
-    if (currentDiffFilePath) {
-      await vscode.commands.executeCommand(
-        "localReview.openDiff",
-        currentDiffFilePath,
-        effectiveBase,
-        commentStore.diffContext.headRevision
-      );
-    }
-  });
+      // Bail if a newer selection arrived while we were awaiting
+      if (generation !== selectionGeneration) return;
+
+      // Re-open the current diff with the new base/head
+      if (currentDiffFilePath) {
+        await vscode.commands.executeCommand(
+          "localReview.openDiff",
+          currentDiffFilePath,
+          effectiveBase,
+          commentStore.diffContext.headRevision
+        );
+      }
+    })
+  );
 
   // Commands
   context.subscriptions.push(
     vscode.commands.registerCommand("localReview.selectAll", () => {
-      if (commentStore.hasComments()) {
-        vscode.window.showWarningMessage(SELECTION_LOCKED_MSG);
-        return;
-      }
+      if (!requireNoComments()) return;
       commitsTree.setAll(true);
     })
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand("localReview.deselectAll", () => {
-      if (commentStore.hasComments()) {
-        vscode.window.showWarningMessage(SELECTION_LOCKED_MSG);
-        return;
-      }
+      if (!requireNoComments()) return;
       commitsTree.setAll(false);
     })
   );
@@ -202,7 +250,7 @@ export async function activate(
             !(await fileHasUncommittedChanges(cwd, filePath)));
 
         const rightUri = useWorkspaceFile
-          ? vscode.Uri.file(`${cwd}/${filePath}`)
+          ? vscode.Uri.joinPath(vscode.Uri.file(cwd), filePath)
           : makeGitUri(headCommit, filePath);
         if (useWorkspaceFile) {
           commentStore.addReviewFileUri(rightUri);

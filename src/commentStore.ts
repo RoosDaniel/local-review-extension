@@ -31,6 +31,12 @@ interface PersistedState {
 
 const STORAGE_KEY = "reviewComments";
 
+function commentBody(comment: vscode.Comment): string {
+  return typeof comment.body === "string"
+    ? comment.body
+    : comment.body.value;
+}
+
 export class CommentStore {
   private commentController: vscode.CommentController;
   private threads: vscode.CommentThread[] = [];
@@ -74,9 +80,7 @@ export class CommentStore {
   private persist(): void {
     const comments: PersistedComment[] = this.threads.map((thread) => {
       const range = thread.range;
-      const body = thread.comments
-        .map((c) => (typeof c.body === "string" ? c.body : c.body.value))
-        .join("\n");
+      const body = thread.comments.map(commentBody).join("\n");
       return {
         uriString: thread.uri.toString(),
         startLine: range?.start.line ?? 0,
@@ -106,6 +110,23 @@ export class CommentStore {
       }
       this.addThread(uri, range, c.body, c.codeContext);
     }
+  }
+
+  private rebuildReviewFileUris(): void {
+    this.reviewFileUris.clear();
+    for (const thread of this.threads) {
+      if (thread.uri.scheme === "file") {
+        this.reviewFileUris.add(thread.uri.toString());
+      }
+    }
+  }
+
+  private disposeThreads(): void {
+    for (const thread of this.threads) {
+      thread.dispose();
+    }
+    this.threads = [];
+    this.threadCodeContext.clear();
   }
 
   get diffContext(): DiffContext {
@@ -169,14 +190,7 @@ export class CommentStore {
         ? "before"
         : "after";
 
-    const body = thread.comments
-      .map((c) => {
-        if (typeof c.body === "string") {
-          return c.body;
-        }
-        return c.body.value;
-      })
-      .join("\n");
+    const body = thread.comments.map(commentBody).join("\n");
 
     const range = thread.range;
     if (!range) {
@@ -220,6 +234,7 @@ export class CommentStore {
       this.threadCodeContext.delete(thread);
       thread.dispose();
       this.threads.splice(idx, 1);
+      this.rebuildReviewFileUris();
       this.persist();
       this._onDidChange.fire();
     }
@@ -235,21 +250,14 @@ export class CommentStore {
   }
 
   clearAll(): void {
-    for (const thread of this.threads) {
-      thread.dispose();
-    }
-    this.threads = [];
-    this.threadCodeContext.clear();
+    this.disposeThreads();
+    this.reviewFileUris.clear();
     this.persist();
     this._onDidChange.fire();
   }
 
   dispose(): void {
-    for (const thread of this.threads) {
-      thread.dispose();
-    }
-    this.threads = [];
-    this.threadCodeContext.clear();
+    this.disposeThreads();
     this._onDidChange.dispose();
     this.commentController.dispose();
   }

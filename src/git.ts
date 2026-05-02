@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import * as vscode from "vscode";
 
 const execFileAsync = promisify(execFile);
 
@@ -15,6 +16,8 @@ export interface ChangedFile {
   status: string;
   path: string;
 }
+
+export const log = vscode.window.createOutputChannel("Local Review");
 
 async function git(
   cwd: string,
@@ -114,7 +117,8 @@ export async function getChangedFiles(
         "-r",
         hash
       );
-    } catch {
+    } catch (err) {
+      log.appendLine(`git diff-tree failed for ${hash}: ${err}`);
       continue;
     }
 
@@ -158,7 +162,8 @@ export async function getFileCommitMap(
           hash
         );
         files = output ? output.split("\n") : [];
-      } catch {
+      } catch (err) {
+        log.appendLine(`git diff-tree failed for ${hash}: ${err}`);
         continue;
       }
     }
@@ -208,12 +213,17 @@ export async function getUncommittedFiles(
     output = await git(cwd, "diff", "--name-status", "HEAD");
   } catch {
     // No HEAD yet (empty repo), try against empty tree
-    output = await git(
-      cwd,
-      "diff",
-      "--name-status",
-      "--cached"
-    );
+    try {
+      output = await git(
+        cwd,
+        "diff",
+        "--name-status",
+        "--cached"
+      );
+    } catch (err) {
+      log.appendLine(`git diff --cached failed: ${err}`);
+      return [];
+    }
   }
 
   if (output) {
@@ -272,4 +282,9 @@ export async function fileHasUncommittedChanges(
 
 export async function getRepoRoot(cwd: string): Promise<string> {
   return git(cwd, "rev-parse", "--show-toplevel");
+}
+
+/** Returns the root commit hash — a stable identity shared across all worktrees/branches. */
+export async function getRepoId(cwd: string): Promise<string> {
+  return git(cwd, "rev-list", "--max-parents=0", "HEAD");
 }

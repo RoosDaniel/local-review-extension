@@ -35,19 +35,19 @@ export class FilesTreeProvider
   private cwd: string;
   private mergeBase = "";
   private headCommit = "";
-  private selectedHashes: string[] = [];
   private fileCommitMap = new Map<string, Set<string>>();
 
   private _onDidChangeTreeData =
     new vscode.EventEmitter<TreeNode | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+  private approvalListener: vscode.Disposable;
 
   constructor(
     cwd: string,
     private approvalStore: ApprovalStore
   ) {
     this.cwd = cwd;
-    approvalStore.onDidChange(() => {
+    this.approvalListener = approvalStore.onDidChange(() => {
       this._onDidChangeTreeData.fire(undefined);
     });
   }
@@ -57,7 +57,6 @@ export class FilesTreeProvider
     mergeBase: string
   ): Promise<void> {
     this.mergeBase = mergeBase;
-    this.selectedHashes = selectedHashes;
     this.headCommit =
       selectedHashes.length > 0 ? selectedHashes[0] : "";
     this.files = await getChangedFiles(
@@ -112,8 +111,9 @@ export class FilesTreeProvider
 
     item.description = `${dir ?? ""} [${statusLabel}]`.trim();
     item.tooltip = `${file.path} (${statusLabel})`;
-    item.resourceUri = vscode.Uri.file(
-      `${this.cwd}/${file.path}`
+    item.resourceUri = vscode.Uri.joinPath(
+      vscode.Uri.file(this.cwd),
+      file.path
     );
     item.command = {
       command: "localReview.openDiff",
@@ -152,6 +152,16 @@ export class FilesTreeProvider
     this._onDidChangeTreeData.fire(undefined);
   }
 
+  getParent(element: TreeNode): TreeNode | undefined {
+    if (element.kind === "file") {
+      const label: GroupLabel = this.isFileApproved(element.file)
+        ? "Reviewed"
+        : "Unreviewed";
+      return { kind: "group", label };
+    }
+    return undefined;
+  }
+
   getChildren(element?: TreeNode): TreeNode[] {
     if (!element) {
       const unreviewed = this.getGroupFiles("Unreviewed");
@@ -172,5 +182,10 @@ export class FilesTreeProvider
       }));
     }
     return [];
+  }
+
+  dispose(): void {
+    this.approvalListener.dispose();
+    this._onDidChangeTreeData.dispose();
   }
 }

@@ -14,7 +14,7 @@ function formatLines(comment: StoredComment): string {
     : `${comment.startLine}-${comment.endLine}`;
 }
 
-export function formatComment(
+function formatComment(
   comment: StoredComment,
   indent = "  "
 ): string {

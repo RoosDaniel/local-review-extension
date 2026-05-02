@@ -172,4 +172,9 @@ export class CommitsTreeProvider
     this._onDidChangeTreeData.fire(undefined);
     this._onSelectionChanged.fire(this.getSelectedHashes());
   }
+
+  dispose(): void {
+    this._onDidChangeTreeData.dispose();
+    this._onSelectionChanged.dispose();
+  }
 }

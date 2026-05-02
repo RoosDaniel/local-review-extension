@@ -18,9 +18,10 @@ export class CommentsTreeProvider
   private _onDidChangeTreeData =
     new vscode.EventEmitter<CommentItem | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+  private storeListener: vscode.Disposable;
 
   constructor(private store: CommentStore) {
-    store.onDidChange(() => this.refresh());
+    this.storeListener = store.onDidChange(() => this.refresh());
     this.refresh();
   }
 
@@ -77,5 +78,10 @@ export class CommentsTreeProvider
 
   getChildren(): CommentItem[] {
     return this.items;
+  }
+
+  dispose(): void {
+    this.storeListener.dispose();
+    this._onDidChangeTreeData.dispose();
   }
 }

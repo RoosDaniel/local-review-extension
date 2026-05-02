@@ -7,7 +7,7 @@
     "vscode": "^1.85.0"
   },
   "categories": ["Other"],
-  "activationEvents": [],
+  "activationEvents": ["workspaceContains:.git"],
   "main": "./out/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -59,6 +59,11 @@
         "title": "Deselect All",
         "category": "Local Review",
         "icon": "$(close-all)"
+      },
+      {
+        "command": "localReview.toggleCommit",
+        "title": "Toggle Commit",
+        "category": "Local Review"
       },
       {
         "command": "localReview.openDiff",
