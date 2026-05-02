@@ -16,6 +16,21 @@ export interface StoredComment {
   codeContext: string;
 }
 
+interface PersistedComment {
+  uriString: string;
+  startLine: number;
+  endLine: number;
+  body: string;
+  codeContext: string;
+}
+
+interface PersistedState {
+  comments: PersistedComment[];
+  diffContext: DiffContext;
+}
+
+const STORAGE_KEY = "reviewComments";
+
 export class CommentStore {
   private commentController: vscode.CommentController;
   private threads: vscode.CommentThread[] = [];
@@ -25,11 +40,13 @@ export class CommentStore {
     baseRevision: "",
     headRevision: "",
   };
+  private state: vscode.Memento;
 
   private _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
 
-  constructor() {
+  constructor(workspaceState: vscode.Memento) {
+    this.state = workspaceState;
     this.commentController = vscode.comments.createCommentController(
       "localReview",
       "Local Review"
@@ -50,6 +67,45 @@ export class CommentStore {
         return [];
       },
     };
+
+    this.restore();
+  }
+
+  private persist(): void {
+    const comments: PersistedComment[] = this.threads.map((thread) => {
+      const range = thread.range;
+      const body = thread.comments
+        .map((c) => (typeof c.body === "string" ? c.body : c.body.value))
+        .join("\n");
+      return {
+        uriString: thread.uri.toString(),
+        startLine: range?.start.line ?? 0,
+        endLine: range?.end.line ?? 0,
+        body,
+        codeContext: this.threadCodeContext.get(thread) ?? "",
+      };
+    });
+    const persisted: PersistedState = {
+      comments,
+      diffContext: this._diffContext,
+    };
+    this.state.update(STORAGE_KEY, persisted);
+  }
+
+  private restore(): void {
+    const persisted = this.state.get<PersistedState>(STORAGE_KEY);
+    if (!persisted || persisted.comments.length === 0) {
+      return;
+    }
+    this._diffContext = persisted.diffContext;
+    for (const c of persisted.comments) {
+      const uri = vscode.Uri.parse(c.uriString);
+      const range = new vscode.Range(c.startLine, 0, c.endLine, 0);
+      if (uri.scheme === "file") {
+        this.reviewFileUris.add(uri.toString());
+      }
+      this.addThread(uri, range, c.body, c.codeContext);
+    }
   }
 
   get diffContext(): DiffContext {
@@ -90,6 +146,7 @@ export class CommentStore {
       vscode.CommentThreadCollapsibleState.Expanded;
     this.threads.push(thread);
     this.threadCodeContext.set(thread, codeContext);
+    this.persist();
     this._onDidChange.fire();
     return thread;
   }
@@ -163,6 +220,7 @@ export class CommentStore {
       this.threadCodeContext.delete(thread);
       thread.dispose();
       this.threads.splice(idx, 1);
+      this.persist();
       this._onDidChange.fire();
     }
   }
@@ -182,11 +240,16 @@ export class CommentStore {
     }
     this.threads = [];
     this.threadCodeContext.clear();
+    this.persist();
     this._onDidChange.fire();
   }
 
   dispose(): void {
-    this.clearAll();
+    for (const thread of this.threads) {
+      thread.dispose();
+    }
+    this.threads = [];
+    this.threadCodeContext.clear();
     this._onDidChange.dispose();
     this.commentController.dispose();
   }

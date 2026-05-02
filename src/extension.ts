@@ -50,7 +50,7 @@ export async function activate(
   );
 
   // Comment store
-  const commentStore = new CommentStore();
+  const commentStore = new CommentStore(context.workspaceState);
   context.subscriptions.push({
     dispose: () => commentStore.dispose(),
   });
@@ -62,7 +62,7 @@ export async function activate(
   });
 
   // Tree providers
-  const commitsTree = new CommitsTreeProvider(cwd);
+  const commitsTree = new CommitsTreeProvider(cwd, context.workspaceState);
   const filesTree = new FilesTreeProvider(cwd, approvalStore);
 
   const commitsTreeView = vscode.window.createTreeView(

@@ -21,6 +21,7 @@ export class CommentsTreeProvider
 
   constructor(private store: CommentStore) {
     store.onDidChange(() => this.refresh());
+    this.refresh();
   }
 
   private refresh(): void {

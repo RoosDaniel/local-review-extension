@@ -8,6 +8,8 @@ import {
 
 export const UNCOMMITTED = "uncommitted";
 
+const SELECTION_KEY = "selectedCommits";
+
 interface CommitItem {
   hash: string;
   shortHash: string;
@@ -23,6 +25,7 @@ export class CommitsTreeProvider
   private commits: CommitItem[] = [];
   private cwd: string;
   private mergeBase = "";
+  private state: vscode.Memento;
 
   private _onDidChangeTreeData =
     new vscode.EventEmitter<CommitItem | undefined>();
@@ -31,8 +34,13 @@ export class CommitsTreeProvider
   private _onSelectionChanged = new vscode.EventEmitter<string[]>();
   readonly onSelectionChanged = this._onSelectionChanged.event;
 
-  constructor(cwd: string) {
+  constructor(cwd: string, workspaceState: vscode.Memento) {
     this.cwd = cwd;
+    this.state = workspaceState;
+  }
+
+  private persistSelection(): void {
+    this.state.update(SELECTION_KEY, this.getSelectedHashes());
   }
 
   getSelectedHashes(): string[] {
@@ -59,7 +67,14 @@ export class CommitsTreeProvider
     this.mergeBase = await getMergeBase(this.cwd, mainBranch);
 
     const commits = await getCommits(this.cwd, mainBranch);
-    this.commits = commits.map((c) => ({ ...c, checked: true }));
+    const persisted = new Set(
+      this.state.get<string[]>(SELECTION_KEY, [])
+    );
+
+    this.commits = commits.map((c) => ({
+      ...c,
+      checked: persisted.size > 0 ? persisted.has(c.hash) : true,
+    }));
 
     // Add virtual "uncommitted changes" entry at the top if there are any
     if (await hasUncommittedChanges(this.cwd)) {
@@ -69,7 +84,8 @@ export class CommitsTreeProvider
         subject: "Uncommitted changes",
         author: "",
         date: "",
-        checked: true,
+        checked:
+          persisted.size > 0 ? persisted.has(UNCOMMITTED) : true,
       });
     }
 
@@ -127,6 +143,7 @@ export class CommitsTreeProvider
     for (const commit of this.commits) {
       commit.checked = checked;
     }
+    this.persistSelection();
     this._onDidChangeTreeData.fire(undefined);
     this._onSelectionChanged.fire(this.getSelectedHashes());
   }
@@ -151,6 +168,7 @@ export class CommitsTreeProvider
     }
 
     // Refresh tree to reflect any auto-corrections
+    this.persistSelection();
     this._onDidChangeTreeData.fire(undefined);
     this._onSelectionChanged.fire(this.getSelectedHashes());
   }
