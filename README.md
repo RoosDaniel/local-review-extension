@@ -16,7 +16,7 @@ Mark files as reviewed with per-commit granularity. Approval persists across ses
 
 ```xml
 <review base="abc1234" head="def5678">
-  <comment file="src/git.ts" lines="15-17" side="new">
+  <comment file="src/git.ts" lines="15-18" side="new">
     <code>
 const { stdout } = await execFileAsync("git", args, {
   cwd,
