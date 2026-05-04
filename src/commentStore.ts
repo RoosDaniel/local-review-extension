@@ -5,9 +5,9 @@ type DiffSide = "before" | "after";
 export type CommentType = "issue" | "suggestion" | "question" | "nitpick";
 
 export const COMMENT_TYPES: readonly CommentType[] = [
-  "issue",
-  "suggestion",
   "question",
+  "suggestion",
+  "issue",
   "nitpick",
 ];
 

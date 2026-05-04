@@ -2,7 +2,7 @@
   "name": "local-llm-review",
   "displayName": "Local LLM Review",
   "description": "Review local git changes with inline comments and export to clipboard",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "publisher": "danielroos",
   "license": "MIT",
   "repository": {
