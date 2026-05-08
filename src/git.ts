@@ -31,7 +31,24 @@ async function git(
 }
 
 export async function getMainBranch(cwd: string): Promise<string> {
-  // Try common main branch names
+  // Prefer remote tracking branches — local main/master often goes stale
+  // when feature branches are rebased onto origin/main without updating local main.
+  for (const name of ["origin/main", "origin/master"]) {
+    try {
+      await git(cwd, "rev-parse", "--verify", name);
+      return name;
+    } catch {
+      // try next
+    }
+  }
+  // Try detecting via remote HEAD symbolic ref
+  try {
+    const ref = await git(cwd, "symbolic-ref", "refs/remotes/origin/HEAD");
+    return ref.replace("refs/remotes/", "");
+  } catch {
+    // ignore
+  }
+  // Fall back to local branches
   for (const name of ["main", "master"]) {
     try {
       await git(cwd, "rev-parse", "--verify", name);
@@ -40,13 +57,7 @@ export async function getMainBranch(cwd: string): Promise<string> {
       // try next
     }
   }
-  // Fall back to detecting via remote HEAD
-  try {
-    const ref = await git(cwd, "symbolic-ref", "refs/remotes/origin/HEAD");
-    return ref.replace("refs/remotes/origin/", "");
-  } catch {
-    return "main";
-  }
+  return "main";
 }
 
 export async function getMergeBase(
@@ -184,7 +195,13 @@ export async function getFileAtRevision(
   filePath: string
 ): Promise<string> {
   try {
-    return await git(cwd, "show", `${revision}:${filePath}`);
+    // Don't trim — preserve trailing newline so the diff against the real file is accurate.
+    const { stdout } = await execFileAsync(
+      "git",
+      ["show", `${revision}:${filePath}`],
+      { cwd, maxBuffer: 10 * 1024 * 1024 }
+    );
+    return stdout;
   } catch {
     // File didn't exist at this revision (e.g. newly added)
     return "";
